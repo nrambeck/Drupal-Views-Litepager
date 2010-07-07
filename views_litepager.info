@@ -1,0 +1,4 @@
+name = View Lite Pager
+description = Provide a lite pager for Views that doesn't require an expensive count query
+core = 6.x
+package = Views

@@ -1,0 +1,103 @@
+<?php
+
+/**
+ * Implement hook_views_pre_execute().
+ */
+function views_litepager_views_pre_execute(&$view) {
+  if ($view->pager['use_pager'] === 'lite') {
+    
+    // Prevent views from executing a count query
+    $view->get_total_rows = FALSE;
+    $view->pager['use_pager'] = FALSE;
+    
+    // Enable flag so we can theme the Lite pager later
+    $view->pager['litepager'] = TRUE;
+    
+    global $pager_page_array, $pager_total, $pager_total_items;
+    // What page was requested:
+    $pager_page_array = isset($_GET['page']) ? explode(',', $_GET['page']) : array();
+    $current_page = $pager_page_array[$view->pager['element']];
+    $min_pages = max($current_page + 1, 2);
+    // total rows in query
+    $pager_total_items[$view->pager['element']] = ($view->pager['items_per_page'] * $min_pages) + 1;
+    // total pages
+    $pager_total[$view->pager['element']] = ceil($pager_total_items[$view->pager['element']] / $view->pager['items_per_page']);
+    // If the requested page was within range. $this->pager['current_page']
+    // defaults to 0 so we don't need to set it in an out-of-range condition.
+    if (!empty($pager_page_array[$view->pager['element']])) {
+      $page = intval($pager_page_array[$view->pager['element']]);
+      if ($page > 0 && $page < $pager_total[$view->pager['element']]) {
+        $view->pager['current_page'] = $page;
+      }
+    }
+    $pager_page_array[$view->pager['element']] = $view->pager['current_page'];
+  }
+}
+
+
+/**
+ * Implement hook_form_alter().
+ * Add Lite pager option to Views UI
+ */
+function views_litepager_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'views_ui_edit_display_form' && $form_state['section'] == 'use_pager') {
+    $form['use_pager']['#options'] = array_merge($form['use_pager']['#options'], array('lite' => t('Lite Pager')));
+  }
+}
+
+/**
+ * Implement hook_theme().
+ * Add a theme function for the Lite pager
+ */
+function views_litepager_theme() {
+  return array(
+    'views_litepager' => array('tags' => array(), 'limit' => 10, 'element' => 0, 'parameters' => array())
+  );
+}
+
+/**
+ * Theming function for rendering the Lite pager
+ * This code is based on theme_pager()
+ */
+function theme_views_litepager($tags, $limit, $element, $parameters) {
+  global $pager_page_array, $pager_total;
+
+  $li_first = theme('pager_first', (isset($tags[0]) ? $tags[0] : t('« first')), $limit, $element, $parameters);
+  $li_previous = theme('pager_previous', (isset($tags[1]) ? $tags[1] : t('‹ previous')), $limit, $element, 1, $parameters);
+  $li_next = theme('pager_next', (isset($tags[3]) ? $tags[3] : t('next ›')), $limit, $element, 1, $parameters);
+
+  if ($pager_total[$element] > 1) {
+    if ($li_first) {
+      $items[] = array(
+        'class' => 'pager-first',
+        'data' => $li_first,
+      );
+    }
+    if ($li_previous) {
+      $items[] = array(
+        'class' => 'pager-previous',
+        'data' => $li_previous,
+      );
+    }
+
+    // End generation.
+    if ($li_next) {
+      $items[] = array(
+        'class' => 'pager-next',
+        'data' => $li_next,
+      );
+    }
+    return theme('item_list', $items, NULL, 'ul', array('class' => 'pager'));
+  }
+}
+
+/**
+ * Preprocess function for the primary view template
+ * Add the Lite pager to the View template
+ */
+function views_litepager_preprocess_views_view(&$vars) {
+  if (!empty($vars['view']->pager['litepager'])) {
+    $exposed_input = isset($vars['view']->exposed_data_raw) ? $vars['view']->exposed_data_raw : NULL;
+    $vars['pager'] = theme('views_litepager', $exposed_input, $vars['view']->pager['items_per_page'], $vars['view']->pager['element']);
+  }
+}
